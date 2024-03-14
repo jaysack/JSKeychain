@@ -17,11 +17,11 @@ final public class JSKeychain: JSKeychainProtocol {
     public var allowOverrides: Bool = false
 
     // MARK: Create
-    public func create(_ data: Data, service: String, account: String) throws {
+    public func create(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
         // Make query
         let query = [
             kSecValueData: data,
-            kSecClass: kSecClassGenericPassword,
+            kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account
         ] as CFDictionary
@@ -29,7 +29,7 @@ final public class JSKeychain: JSKeychainProtocol {
         let saveStatus = SecItemAdd(query, nil)
         // Check for existing item (if allowed)
         if saveStatus == errSecDuplicateItem && allowOverrides {
-            try update(data, service: service, account: account)
+            try update(data, service: service, account: account, class: `class`)
         // Check errors
         } else if saveStatus != errSecSuccess {
             throw JSKeychainError.unableToCreateItem(saveStatus)
@@ -37,10 +37,10 @@ final public class JSKeychain: JSKeychainProtocol {
     }
     
     // MARK: Read
-    public func read(service: String, account: String) throws -> Data? {
+    public func read(service: String, account: String, class: CFString = kSecClassGenericPassword) throws -> Data? {
         // Make query
         let query = [
-            kSecClass: kSecClassGenericPassword,
+            kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account,
             kSecReturnData: true
@@ -58,10 +58,10 @@ final public class JSKeychain: JSKeychainProtocol {
     }
 
     // MARK: Update
-    public func update(_ data: Data, service: String, account: String) throws {
+    public func update(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
         // Make query
         let query = [
-            kSecClass: kSecClassGenericPassword,
+            kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account
         ] as CFDictionary
@@ -75,10 +75,10 @@ final public class JSKeychain: JSKeychainProtocol {
     }
 
     // MARK: Delete
-    public func delete(service: String, account: String) throws {
+    public func delete(service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
         // Make query
         let query = [
-            kSecClass: kSecClassGenericPassword,
+            kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account
         ] as CFDictionary
