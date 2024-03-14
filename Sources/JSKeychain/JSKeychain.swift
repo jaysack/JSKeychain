@@ -32,7 +32,7 @@ final public class JSKeychain: JSKeychainProtocol {
             try update(data, service: service, account: account)
         // Check errors
         } else if saveStatus != errSecSuccess {
-            throw KSKeychainError.unableToCreateItem(saveStatus)
+            throw JSKeychainError.unableToCreateItem(saveStatus)
         }
     }
     
@@ -50,10 +50,10 @@ final public class JSKeychain: JSKeychainProtocol {
         let readStatus = SecItemCopyMatching(query, &result)
         // Check errors
         if readStatus != errSecSuccess {
-            throw KSKeychainError.unableToReadItem(readStatus)
+            throw JSKeychainError.unableToReadItem(readStatus)
         }
         // Downcast to Data type
-        guard let data = result as? Data else { throw KSKeychainError.invalidDataType }
+        guard let data = result as? Data else { throw JSKeychainError.invalidDataType }
         return data
     }
 
@@ -70,7 +70,7 @@ final public class JSKeychain: JSKeychainProtocol {
         let updateStatus = SecItemUpdate(query, updatedData)
         // Check errors
         if updateStatus != errSecSuccess {
-            throw KSKeychainError.unableToUpdateItem(updateStatus)
+            throw JSKeychainError.unableToUpdateItem(updateStatus)
         }
     }
 
@@ -86,7 +86,7 @@ final public class JSKeychain: JSKeychainProtocol {
         let deleteStatus = SecItemDelete(query)
         // Check errors
         if deleteStatus != errSecSuccess {
-            throw KSKeychainError.unableToDeleteItem(deleteStatus)
+            throw JSKeychainError.unableToDeleteItem(deleteStatus)
         }
     }
 }

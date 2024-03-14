@@ -7,7 +7,7 @@
 
 import Foundation
 
-public enum KSKeychainError: Error {
+public enum JSKeychainError: Error {
     case unableToCreateItem(OSStatus)
     case unableToReadItem(OSStatus)
     case unableToUpdateItem(OSStatus)
