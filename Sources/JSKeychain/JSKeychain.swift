@@ -18,18 +18,26 @@ final public class JSKeychain: JSKeychainProtocol {
 
     // MARK: Create
     public func create(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
+        try create(data, service: service, account: account, class: `class`, accessGroup: nil)
+    }
+    
+    public func create(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws {
         // Make query
-        let query = [
+        var query: [CFString: Any] = [
             kSecValueData: data,
             kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account
-        ] as CFDictionary
+        ]
+        // Add access group if provided
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup] = accessGroup
+        }
         // Check save status
-        let saveStatus = SecItemAdd(query, nil)
+        let saveStatus = SecItemAdd(query as CFDictionary, nil)
         // Check for existing item (if allowed)
         if saveStatus == errSecDuplicateItem && allowOverrides {
-            try update(data, service: service, account: account, class: `class`)
+            try update(data, service: service, account: account, class: `class`, accessGroup: accessGroup)
         // Check errors
         } else if saveStatus != errSecSuccess {
             throw JSKeychainError.unableToCreateItem(saveStatus)
@@ -38,16 +46,24 @@ final public class JSKeychain: JSKeychainProtocol {
     
     // MARK: Read
     public func read(service: String, account: String, class: CFString = kSecClassGenericPassword) throws -> Data? {
+        try read(service: service, account: account, class: `class`, accessGroup: nil)
+    }
+    
+    public func read(service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws -> Data? {
         // Make query
-        let query = [
+        var query: [CFString: Any] = [
             kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account,
             kSecReturnData: true
-        ] as CFDictionary
+        ]
+        // Add access group if provided
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup] = accessGroup
+        }
         // Set result
         var result: AnyObject?
-        let readStatus = SecItemCopyMatching(query, &result)
+        let readStatus = SecItemCopyMatching(query as CFDictionary, &result)
         // Check errors
         if readStatus != errSecSuccess {
             throw JSKeychainError.unableToReadItem(readStatus)
@@ -59,15 +75,23 @@ final public class JSKeychain: JSKeychainProtocol {
 
     // MARK: Update
     public func update(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
+        try update(data, service: service, account: account, class: `class`, accessGroup: nil)
+    }
+    
+    public func update(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws {
         // Make query
-        let query = [
+        var query: [CFString: Any] = [
             kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account
-        ] as CFDictionary
+        ]
+        // Add access group if provided
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup] = accessGroup
+        }
         // Update item
         let updatedData = [kSecValueData: data] as CFDictionary
-        let updateStatus = SecItemUpdate(query, updatedData)
+        let updateStatus = SecItemUpdate(query as CFDictionary, updatedData)
         // Check errors
         if updateStatus != errSecSuccess {
             throw JSKeychainError.unableToUpdateItem(updateStatus)
@@ -76,14 +100,22 @@ final public class JSKeychain: JSKeychainProtocol {
 
     // MARK: Delete
     public func delete(service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
+        try delete(service: service, account: account, class: `class`, accessGroup: nil)
+    }
+    
+    public func delete(service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws {
         // Make query
-        let query = [
+        var query: [CFString: Any] = [
             kSecClass: `class`,
             kSecAttrService: service,
             kSecAttrAccount: account
-        ] as CFDictionary
+        ]
+        // Add access group if provided
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup] = accessGroup
+        }
         // Delete item
-        let deleteStatus = SecItemDelete(query)
+        let deleteStatus = SecItemDelete(query as CFDictionary)
         // Check errors
         if deleteStatus != errSecSuccess {
             throw JSKeychainError.unableToDeleteItem(deleteStatus)
