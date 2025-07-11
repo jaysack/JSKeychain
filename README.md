@@ -44,14 +44,14 @@ Add JSKeychain to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/yourusername/JSKeychain.git", from: "1.0.0")
+    .package(url: "https://github.com/jaysack/JSKeychain.git", from: "2.0.0")
 ]
 ```
 
 Or in Xcode:
 1. File → Add Package Dependencies
-2. Enter: `https://github.com/yourusername/JSKeychain.git`
-3. Select "Up to Next Major Version" with "1.0.0"
+2. Enter: `https://github.com/jaysack/JSKeychain.git`
+3. Select "Up to Next Major Version" with "2.0.0"
 
 ## Quick Start
 
