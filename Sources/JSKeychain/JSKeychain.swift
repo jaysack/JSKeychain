@@ -6,119 +6,333 @@
 //
 
 import Foundation
+import LocalAuthentication
 
-final public class JSKeychain: JSKeychainProtocol {
-
-    // MARK: Init
-    private init() { }
-
+public class JSKeychain {
+    
     // MARK: Properties
-    public static let shared = JSKeychain()
-    public var allowOverrides: Bool = false
-
-    // MARK: Create
-    public func create(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
-        try create(data, service: service, account: account, class: `class`, accessGroup: nil)
+    // Optional access group for keychain sharing between apps
+    private let accessGroup: String?
+    // Encoder
+    private let encoder: JSONEncoder
+    // Decoder
+    private let decoder: JSONDecoder
+    
+    // MARK: Init
+    public init(accessGroup: String? = nil, encoder: JSONEncoder = JSONEncoder(), decoder: JSONDecoder = JSONDecoder()) {
+        self.accessGroup = accessGroup
+        self.encoder = encoder
+        self.decoder = decoder
     }
     
-    public func create(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws {
-        // Make query
-        var query: [CFString: Any] = [
-            kSecValueData: data,
-            kSecClass: `class`,
-            kSecAttrService: service,
-            kSecAttrAccount: account
+    // MARK: - Save (Sync)
+    public func save<T: Codable>(
+        _ item: T,
+        service: String,
+        account: String,
+        accessibility: JSKeychainAccessibility = .whenUnlocked,
+        biometricOptions: JSBiometricOptions? = nil
+    ) throws {
+        
+        // Encode the item
+        let data = try encoder.encode(item)
+        
+        // Build query
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: accessibility.cfString
         ]
-        // Add access group if provided
+        
+        // Add access group if specified
         if let accessGroup = accessGroup {
-            query[kSecAttrAccessGroup] = accessGroup
+            query[kSecAttrAccessGroup as String] = accessGroup
         }
-        // Check save status
-        let saveStatus = SecItemAdd(query as CFDictionary, nil)
-        // Check for existing item (if allowed)
-        if saveStatus == errSecDuplicateItem && allowOverrides {
-            try update(data, service: service, account: account, class: `class`, accessGroup: accessGroup)
-        // Check errors
-        } else if saveStatus != errSecSuccess {
-            throw JSKeychainError.unableToCreateItem(saveStatus)
+        
+        // Add biometric protection if requested
+        if let biometric = biometricOptions, biometric.required {
+            let access = SecAccessControlCreateWithFlags(
+                nil,
+                accessibility.cfString,
+                biometric.fallbackToPasscode ? .userPresence : .biometryCurrentSet,
+                nil
+            )
+            query[kSecAttrAccessControl as String] = access
         }
-    }
-    
-    // MARK: Read
-    public func read(service: String, account: String, class: CFString = kSecClassGenericPassword) throws -> Data? {
-        try read(service: service, account: account, class: `class`, accessGroup: nil)
-    }
-    
-    public func read(service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws -> Data? {
-        // Make query
-        var query: [CFString: Any] = [
-            kSecClass: `class`,
-            kSecAttrService: service,
-            kSecAttrAccount: account,
-            kSecReturnData: true
+        
+        // Try to update first
+        let updateQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
         ]
-        // Add access group if provided
-        if let accessGroup = accessGroup {
-            query[kSecAttrAccessGroup] = accessGroup
+        
+        let updateAttributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: accessibility.cfString
+        ]
+        
+        var status = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
+        
+        // If item doesn't exist, add it
+        if status == errSecItemNotFound {
+            status = SecItemAdd(query as CFDictionary, nil)
         }
-        // Set result
+        
+        guard status == errSecSuccess else {
+            throw JSKeychainError.unhandledError(status: status)
+        }
+    }
+    
+    // MARK: - Save (Async)
+    public func save<T: Codable>(
+        _ item: T,
+        service: String,
+        account: String,
+        accessibility: JSKeychainAccessibility = .whenUnlocked,
+        biometricOptions: JSBiometricOptions? = nil
+    ) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            Task {
+                do {
+                    try self.save(
+                        item,
+                        service: service,
+                        account: account,
+                        accessibility: accessibility,
+                        biometricOptions: biometricOptions
+                    )
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Read (Sync)
+    public func read<T: Codable>(
+        service: String,
+        account: String,
+        biometricReason: String? = nil
+    ) throws -> T {
+        
+        // Build query
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        
+        // Add access group if specified
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        
+        // Add biometric authentication context if needed
+        if let reason = biometricReason {
+            let context = LAContext()
+            context.localizedReason = reason
+            query[kSecUseAuthenticationContext as String] = context
+        }
+        
+        // Execute query
         var result: AnyObject?
-        let readStatus = SecItemCopyMatching(query as CFDictionary, &result)
-        // Check errors
-        if readStatus != errSecSuccess {
-            throw JSKeychainError.unableToReadItem(readStatus)
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess else {
+            if status == errSecItemNotFound {
+                throw JSKeychainError.itemNotFound
+            }
+            throw JSKeychainError.unhandledError(status: status)
         }
-        // Downcast to Data type
-        guard let data = result as? Data else { throw JSKeychainError.invalidDataType }
-        return data
-    }
-
-    // MARK: Update
-    public func update(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
-        try update(data, service: service, account: account, class: `class`, accessGroup: nil)
+        
+        guard let data = result as? Data else {
+            throw JSKeychainError.invalidData
+        }
+        
+        // Decode the data
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            throw JSKeychainError.invalidData
+        }
     }
     
-    public func update(_ data: Data, service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws {
-        // Make query
-        var query: [CFString: Any] = [
-            kSecClass: `class`,
-            kSecAttrService: service,
-            kSecAttrAccount: account
-        ]
-        // Add access group if provided
-        if let accessGroup = accessGroup {
-            query[kSecAttrAccessGroup] = accessGroup
+    // MARK: - Read (Async)
+    public func read<T: Codable>(
+        service: String,
+        account: String,
+        biometricReason: String? = nil
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            Task {
+                do {
+                    let result: T = try self.read(
+                        service: service,
+                        account: account,
+                        biometricReason: biometricReason
+                    )
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
         }
-        // Update item
-        let updatedData = [kSecValueData: data] as CFDictionary
-        let updateStatus = SecItemUpdate(query as CFDictionary, updatedData)
-        // Check errors
-        if updateStatus != errSecSuccess {
-            throw JSKeychainError.unableToUpdateItem(updateStatus)
-        }
-    }
-
-    // MARK: Delete
-    public func delete(service: String, account: String, class: CFString = kSecClassGenericPassword) throws {
-        try delete(service: service, account: account, class: `class`, accessGroup: nil)
     }
     
-    public func delete(service: String, account: String, class: CFString = kSecClassGenericPassword, accessGroup: String?) throws {
-        // Make query
-        var query: [CFString: Any] = [
-            kSecClass: `class`,
-            kSecAttrService: service,
-            kSecAttrAccount: account
+    // MARK: - Delete (Sync)
+    public func delete(service: String, account: String) throws {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
         ]
-        // Add access group if provided
+        
+        // Add access group if specified
         if let accessGroup = accessGroup {
-            query[kSecAttrAccessGroup] = accessGroup
+            query[kSecAttrAccessGroup as String] = accessGroup
         }
-        // Delete item
-        let deleteStatus = SecItemDelete(query as CFDictionary)
-        // Check errors
-        if deleteStatus != errSecSuccess {
-            throw JSKeychainError.unableToDeleteItem(deleteStatus)
+        
+        let status = SecItemDelete(query as CFDictionary)
+        
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw JSKeychainError.unhandledError(status: status)
+        }
+    }
+    
+    // MARK: - Delete (Async)
+    public func delete(service: String, account: String) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            Task {
+                do {
+                    try self.delete(service: service, account: account)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Exists (Sync)
+    public func exists(service: String, account: String) -> Bool {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: false,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        
+        // Add access group if specified
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+    
+    // MARK: - Exists (Async)
+    public func exists(service: String, account: String) async -> Bool {
+        await withCheckedContinuation { continuation in
+            Task {
+                let result = self.exists(service: service, account: account)
+                continuation.resume(returning: result)
+            }
+        }
+    }
+    
+    // MARK: - List All (Sync)
+    public func listAll(service: String? = nil) throws -> [JSKeychainItem] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        
+        // Add service filter if specified
+        if let service = service {
+            query[kSecAttrService as String] = service
+        }
+        
+        // Add access group if specified
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess else {
+            if status == errSecItemNotFound {
+                return []
+            }
+            throw JSKeychainError.unhandledError(status: status)
+        }
+        
+        guard let items = result as? [[String: Any]] else {
+            return []
+        }
+        
+        return items.compactMap { attributes in
+            guard let service = attributes[kSecAttrService as String] as? String,
+                  let account = attributes[kSecAttrAccount as String] as? String
+            else {
+                return nil
+            }
+            
+            let createdAt = attributes[kSecAttrCreationDate as String] as? Date
+            let modifiedAt = attributes[kSecAttrModificationDate as String] as? Date
+            
+            return JSKeychainItem(
+                service: service,
+                account: account,
+                createdAt: createdAt,
+                modifiedAt: modifiedAt
+            )
+        }
+    }
+    
+    // MARK: - List All (Async)
+    public func listAll(service: String? = nil) async throws -> [JSKeychainItem] {
+        try await withCheckedThrowingContinuation { continuation in
+            Task {
+                do {
+                    let result = try self.listAll(service: service)
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Delete All (Sync)
+    public func deleteAll(service: String? = nil) throws {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword
+        ]
+        
+        // Add service filter if specified
+        if let service = service {
+            query[kSecAttrService as String] = service
+        }
+        
+        // Add access group if specified
+        if let accessGroup = accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        
+        let status = SecItemDelete(query as CFDictionary)
+        
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw JSKeychainError.unhandledError(status: status)
         }
     }
 }
