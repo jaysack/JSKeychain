@@ -8,7 +8,7 @@
 import Foundation
 import LocalAuthentication
 
-public class JSKeychain {
+public final class JSKeychain: Sendable {
     
     // MARK: Properties
     // Optional access group for keychain sharing between apps
