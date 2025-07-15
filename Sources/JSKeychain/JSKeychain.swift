@@ -40,8 +40,8 @@ public final class JSKeychain: Sendable {
         // Build query
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: service.lowercased(),
+            kSecAttrAccount as String: account.lowercased(),
             kSecValueData as String: data,
             kSecAttrAccessible as String: accessibility.cfString
         ]
@@ -65,8 +65,8 @@ public final class JSKeychain: Sendable {
         // Try to update first
         let updateQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrService as String: service.lowercased(),
+            kSecAttrAccount as String: account.lowercased()
         ]
         
         let updateAttributes: [String: Any] = [
@@ -122,8 +122,8 @@ public final class JSKeychain: Sendable {
         // Build query
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: service.lowercased(),
+            kSecAttrAccount as String: account.lowercased(),
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -189,8 +189,8 @@ public final class JSKeychain: Sendable {
     public func delete(service: String, account: String) throws {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrService as String: service.lowercased(),
+            kSecAttrAccount as String: account.lowercased()
         ]
         
         // Add access group if specified
@@ -223,8 +223,8 @@ public final class JSKeychain: Sendable {
     public func exists(service: String, account: String) -> Bool {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: service.lowercased(),
+            kSecAttrAccount as String: account.lowercased(),
             kSecReturnData as String: false,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -257,7 +257,7 @@ public final class JSKeychain: Sendable {
         ]
         
         // Add service filter if specified
-        if let service = service {
+        if let service = service?.lowercased() {
             query[kSecAttrService as String] = service
         }
         
@@ -320,7 +320,7 @@ public final class JSKeychain: Sendable {
         ]
         
         // Add service filter if specified
-        if let service = service {
+        if let service = service?.lowercased() {
             query[kSecAttrService as String] = service
         }
         
