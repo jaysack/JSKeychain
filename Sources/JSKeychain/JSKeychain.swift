@@ -11,18 +11,34 @@ import LocalAuthentication
 public final class JSKeychain: Sendable {
     
     // MARK: Properties
-    // Optional access group for keychain sharing between apps
-    private let accessGroup: String?
-    // Encoder
-    private let encoder: JSONEncoder
-    // Decoder
-    private let decoder: JSONDecoder
+    // Instance configuration
+    private let configuration: JSKeychainConfiguration
+    
+    // Convenience accessors for backward compatibility
+    private var accessGroup: String? { configuration.accessGroup }
+    private var syncToICloud: Bool { configuration.syncToICloud }
+    private var encoder: JSONEncoder { configuration.encoder }
+    private var decoder: JSONDecoder { configuration.decoder }
     
     // MARK: Init
-    public init(accessGroup: String? = nil, encoder: JSONEncoder = JSONEncoder(), decoder: JSONDecoder = JSONDecoder()) {
-        self.accessGroup = accessGroup
-        self.encoder = encoder
-        self.decoder = decoder
+    /// Initialize with a configuration object
+    public init(configuration: JSKeychainConfiguration = JSKeychainConfiguration()) {
+        self.configuration = configuration
+    }
+    
+    /// Initialize with individual parameters (backward compatibility)
+    public convenience init(
+        accessGroup: String? = nil,
+        encoder: JSONEncoder = JSONEncoder(),
+        decoder: JSONDecoder = JSONDecoder()
+    ) {
+        let config = JSKeychainConfiguration(
+            accessGroup: accessGroup,
+            syncToICloud: false,
+            encoder: encoder,
+            decoder: decoder
+        )
+        self.init(configuration: config)
     }
     
     // MARK: - Save (Sync)
@@ -51,6 +67,11 @@ public final class JSKeychain: Sendable {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
         
+        // Add iCloud sync if enabled and not using device-only accessibility
+        if syncToICloud && !isDeviceOnlyAccessibility(accessibility) {
+            query[kSecAttrSynchronizable as String] = true
+        }
+        
         // Add biometric protection if requested
         if let biometric = biometricOptions, biometric.required {
             let access = SecAccessControlCreateWithFlags(
@@ -63,11 +84,16 @@ public final class JSKeychain: Sendable {
         }
         
         // Try to update first
-        let updateQuery: [String: Any] = [
+        var updateQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service.lowercased(),
             kSecAttrAccount as String: account.lowercased()
         ]
+        
+        // Include sync attribute in update query if needed
+        if syncToICloud && !isDeviceOnlyAccessibility(accessibility) {
+            updateQuery[kSecAttrSynchronizable as String] = true
+        }
         
         let updateAttributes: [String: Any] = [
             kSecValueData as String: data,
@@ -131,6 +157,11 @@ public final class JSKeychain: Sendable {
         // Add access group if specified
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        
+        // Include sync attribute to search both local and synced items
+        if syncToICloud {
+            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         }
         
         // Add biometric authentication context if needed
@@ -198,6 +229,11 @@ public final class JSKeychain: Sendable {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
         
+        // Include sync attribute to delete both local and synced items
+        if syncToICloud {
+            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+        }
+        
         let status = SecItemDelete(query as CFDictionary)
         
         guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -234,6 +270,11 @@ public final class JSKeychain: Sendable {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
         
+        // Include sync attribute to check both local and synced items
+        if syncToICloud {
+            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+        }
+        
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         return status == errSecSuccess
     }
@@ -264,6 +305,11 @@ public final class JSKeychain: Sendable {
         // Add access group if specified
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        
+        // Include sync attribute to list both local and synced items
+        if syncToICloud {
+            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         }
         
         var result: AnyObject?
@@ -313,6 +359,17 @@ public final class JSKeychain: Sendable {
         }
     }
     
+    // MARK: - Helper Methods
+    private func isDeviceOnlyAccessibility(_ accessibility: JSKeychainAccessibility) -> Bool {
+        switch accessibility {
+        case .whenPasscodeSet, .whenPasscodeSetThisDeviceOnly,
+             .whenUnlockedThisDeviceOnly, .afterFirstUnlockThisDeviceOnly:
+            return true
+        default:
+            return false
+        }
+    }
+    
     // MARK: - Delete All (Sync)
     public func deleteAll(service: String? = nil) throws {
         var query: [String: Any] = [
@@ -327,6 +384,11 @@ public final class JSKeychain: Sendable {
         // Add access group if specified
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        
+        // Include sync attribute to delete both local and synced items
+        if syncToICloud {
+            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         }
         
         let status = SecItemDelete(query as CFDictionary)
