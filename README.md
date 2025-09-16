@@ -13,6 +13,7 @@ A modern Swift wrapper for iOS Keychain Services with async/await support, type-
   - [Async/Await Support](#asyncawait-support)
   - [Access Control Options](#access-control-options)
   - [Biometric Authentication](#biometric-authentication)
+  - [iCloud Keychain Sync](#icloud-keychain-sync)
   - [Keychain Sharing](#keychain-sharing)
   - [Custom Encoders/Decoders](#custom-encodersdecoders)
 - [Security Best Practices](#security-best-practices)
@@ -25,6 +26,7 @@ A modern Swift wrapper for iOS Keychain Services with async/await support, type-
 - ⚡ **Modern Swift**: Full async/await support for all operations
 - 🔒 **Biometric Protection**: Touch ID/Face ID authentication support
 - 📱 **Access Control**: Comprehensive security options for different use cases
+- ☁️ **iCloud Keychain Sync**: Optional synchronization across devices
 - 🔄 **Keychain Sharing**: Share data between your apps via App Groups
 - 🎯 **Simple API**: Clean, intuitive methods - `save`, `read`, `delete`, `exists`, `listAll`
 - 📦 **Zero Dependencies**: Pure Swift implementation
@@ -58,8 +60,12 @@ Or in Xcode:
 ```swift
 import JSKeychain
 
-// Initialize
+// Initialize (local-only by default)
 let keychain = JSKeychain()
+
+// Initialize with iCloud sync enabled
+let config = JSKeychainConfiguration(syncToICloud: true)
+let cloudKeychain = JSKeychain(configuration: config)
 
 // Save data
 try await keychain.save("secret-token", service: "MyApp", account: "userToken")
@@ -188,14 +194,16 @@ try await keychain.save(
 
 #### Access Control Options Explained
 
-| Option | When Accessible | iCloud Sync | Use Case |
-|--------|----------------|-------------|----------|
+| Option | When Accessible | Can Sync to iCloud* | Use Case |
+|--------|----------------|-------------------|----------|
 | `.whenUnlocked` | Device unlocked | ✅ Yes | Session tokens, user data |
 | `.afterFirstUnlock` | After first unlock since boot | ✅ Yes | Background refresh tokens |
 | `.whenPasscodeSet` | Device has passcode | ❌ No | Highly sensitive data |
 | `.whenUnlockedThisDeviceOnly` | Device unlocked | ❌ No | Device-specific tokens |
 | `.afterFirstUnlockThisDeviceOnly` | After first unlock | ❌ No | Device-specific background data |
 | `.whenPasscodeSetThisDeviceOnly` | Device has passcode | ❌ No | Maximum security + device only |
+
+*iCloud sync only occurs when `syncToICloud: true` is set in configuration AND using a non-device-only accessibility option.
 
 ### Biometric Authentication
 
@@ -224,6 +232,46 @@ let password: String = try await keychain.read(
     biometricReason: "Authenticate to access your password"
 )
 ```
+
+### iCloud Keychain Sync
+
+Synchronize keychain items across user's devices via iCloud:
+
+```swift
+// Initialize with iCloud sync enabled
+let config = JSKeychainConfiguration(
+    syncToICloud: true  // Default is false for security
+)
+let keychain = JSKeychain(configuration: config)
+
+// Save items that will sync to iCloud
+try await keychain.save(
+    userPreferences,
+    service: "MyApp",
+    account: "preferences",
+    accessibility: .whenUnlocked  // Must use non-device-only accessibility
+)
+
+// Items with "ThisDeviceOnly" accessibility never sync
+try await keychain.save(
+    deviceSpecificToken,
+    service: "MyApp", 
+    account: "deviceToken",
+    accessibility: .whenUnlockedThisDeviceOnly  // Won't sync even with syncToICloud: true
+)
+
+// Read will automatically find both local and synced items
+let prefs: UserPreferences = try await keychain.read(
+    service: "MyApp",
+    account: "preferences"
+)
+```
+
+**Important Notes:**
+- iCloud sync is disabled by default for security - explicitly opt-in with `syncToICloud: true`
+- Items only sync when using non-device-only accessibility options
+- Synced items are available on all devices signed into the same iCloud account
+- Items saved without sync cannot be "upgraded" - you must delete and re-save to enable sync
 
 ### Keychain Sharing
 
@@ -261,6 +309,15 @@ encoder.dateEncodingStrategy = .iso8601
 let decoder = JSONDecoder()
 decoder.dateDecodingStrategy = .iso8601
 
+// Using the configuration approach
+let config = JSKeychainConfiguration(
+    syncToICloud: false,
+    encoder: encoder,
+    decoder: decoder
+)
+let keychain = JSKeychain(configuration: config)
+
+// Or using the convenience initializer (no iCloud sync)
 let keychain = JSKeychain(encoder: encoder, decoder: decoder)
 
 // Now dates will be encoded/decoded using ISO8601 format
@@ -337,6 +394,10 @@ try await keychain.save(token, service: "MyApp", account: "token")
 
 ```swift
 class JSKeychain {
+    // Initialize with configuration
+    init(configuration: JSKeychainConfiguration = JSKeychainConfiguration())
+    
+    // Initialize with individual parameters (backward compatibility, no iCloud sync)
     init(accessGroup: String? = nil, encoder: JSONEncoder = JSONEncoder(), decoder: JSONDecoder = JSONDecoder())
     
     // Save item
@@ -373,6 +434,24 @@ enum JSKeychainError: LocalizedError {
     case duplicateItem         // Item already exists (not used in current implementation)
     case invalidData           // Data corruption or decoding failure
     case unhandledError(status: OSStatus)  // Other keychain errors
+}
+```
+
+### JSKeychainConfiguration
+
+```swift
+struct JSKeychainConfiguration {
+    let accessGroup: String?      // Optional app group for keychain sharing
+    let syncToICloud: Bool        // Enable iCloud Keychain sync (default: false)
+    let encoder: JSONEncoder      // JSON encoder for Codable types
+    let decoder: JSONDecoder      // JSON decoder for Codable types
+    
+    init(
+        accessGroup: String? = nil,
+        syncToICloud: Bool = false,
+        encoder: JSONEncoder = JSONEncoder(),
+        decoder: JSONDecoder = JSONDecoder()
+    )
 }
 ```
 
