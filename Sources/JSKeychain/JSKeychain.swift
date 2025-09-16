@@ -358,18 +358,7 @@ public final class JSKeychain: Sendable {
             }
         }
     }
-    
-    // MARK: - Helper Methods
-    private func isDeviceOnlyAccessibility(_ accessibility: JSKeychainAccessibility) -> Bool {
-        switch accessibility {
-        case .whenPasscodeSet, .whenPasscodeSetThisDeviceOnly,
-             .whenUnlockedThisDeviceOnly, .afterFirstUnlockThisDeviceOnly:
-            return true
-        default:
-            return false
-        }
-    }
-    
+   
     // MARK: - Delete All (Sync)
     public func deleteAll(service: String? = nil) throws {
         var query: [String: Any] = [
@@ -395,6 +384,20 @@ public final class JSKeychain: Sendable {
         
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw JSKeychainError.unhandledError(status: status)
+        }
+    }
+}
+
+// MARK: - EXT. Helper Methods
+private extension JSKeychain {
+    // Is device only accessibility
+    func isDeviceOnlyAccessibility(_ accessibility: JSKeychainAccessibility) -> Bool {
+        switch accessibility {
+        case .whenPasscodeSet, .whenPasscodeSetThisDeviceOnly,
+             .whenUnlockedThisDeviceOnly, .afterFirstUnlockThisDeviceOnly:
+            return true
+        default:
+            return false
         }
     }
 }
