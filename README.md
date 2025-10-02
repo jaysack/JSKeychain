@@ -271,7 +271,8 @@ let prefs: UserPreferences = try await keychain.read(
 - iCloud sync is disabled by default for security - explicitly opt-in with `syncToICloud: true`
 - Items only sync when using non-device-only accessibility options
 - Synced items are available on all devices signed into the same iCloud account
-- Items saved without sync cannot be "upgraded" - you must delete and re-save to enable sync
+- Items can be updated to enable/disable sync by re-saving them with a different configuration (v2.3.1+)
+- When changing sync state, `save()` automatically updates the item's sync attribute
 
 ### Keychain Sharing
 
