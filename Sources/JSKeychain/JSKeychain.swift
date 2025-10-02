@@ -89,16 +89,28 @@ public final class JSKeychain: Sendable {
             kSecAttrService as String: service.lowercased(),
             kSecAttrAccount as String: account.lowercased()
         ]
-        
-        // Include sync attribute in update query if needed
-        if syncToICloud && !isDeviceOnlyAccessibility(accessibility) {
-            updateQuery[kSecAttrSynchronizable as String] = true
+
+        // Add access group to update query if specified
+        if let accessGroup = accessGroup {
+            updateQuery[kSecAttrAccessGroup as String] = accessGroup
         }
-        
-        let updateAttributes: [String: Any] = [
+
+        // Use kSecAttrSynchronizableAny to find items regardless of current sync state
+        // This allows updating items from sync=false to sync=true (and vice versa)
+        updateQuery[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+
+        var updateAttributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: accessibility.cfString
         ]
+
+        // Include sync attribute in update attributes to change the sync state
+        if syncToICloud && !isDeviceOnlyAccessibility(accessibility) {
+            updateAttributes[kSecAttrSynchronizable as String] = true
+        } else {
+            // Explicitly set to false when sync is disabled or using device-only accessibility
+            updateAttributes[kSecAttrSynchronizable as String] = false
+        }
         
         var status = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
         
