@@ -170,11 +170,10 @@ public final class JSKeychain: Sendable {
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
-        
-        // Include sync attribute to search both local and synced items
-        if syncToICloud {
-            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
-        }
+
+        // Always search both local and synced items regardless of instance configuration
+        // This allows Device B to read items synced from Device A even before enabling sync on Device B
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         
         // Add biometric authentication context if needed
         if let reason = biometricReason {
@@ -235,17 +234,15 @@ public final class JSKeychain: Sendable {
             kSecAttrService as String: service.lowercased(),
             kSecAttrAccount as String: account.lowercased()
         ]
-        
+
         // Add access group if specified
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
-        
-        // Include sync attribute to delete both local and synced items
-        if syncToICloud {
-            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
-        }
-        
+
+        // Always delete both local and synced items regardless of instance configuration
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+
         let status = SecItemDelete(query as CFDictionary)
         
         guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -281,11 +278,9 @@ public final class JSKeychain: Sendable {
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
-        
-        // Include sync attribute to check both local and synced items
-        if syncToICloud {
-            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
-        }
+
+        // Always check both local and synced items regardless of instance configuration
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         return status == errSecSuccess
@@ -318,11 +313,9 @@ public final class JSKeychain: Sendable {
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
-        
-        // Include sync attribute to list both local and synced items
-        if syncToICloud {
-            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
-        }
+
+        // Always list both local and synced items regardless of instance configuration
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -376,22 +369,20 @@ public final class JSKeychain: Sendable {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword
         ]
-        
+
         // Add service filter if specified
         if let service = service?.lowercased() {
             query[kSecAttrService as String] = service
         }
-        
+
         // Add access group if specified
         if let accessGroup = accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
-        
-        // Include sync attribute to delete both local and synced items
-        if syncToICloud {
-            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
-        }
-        
+
+        // Always delete both local and synced items regardless of instance configuration
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+
         let status = SecItemDelete(query as CFDictionary)
         
         guard status == errSecSuccess || status == errSecItemNotFound else {
